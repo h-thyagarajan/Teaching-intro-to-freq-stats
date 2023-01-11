@@ -1,0 +1,197 @@
+---
+title: "Sampling distributions"
+author: "HT"
+date: "03/11/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+###Working with probability distributions on R###
+
+##Using Normal distributions as an example here##
+
+#Density function: 
+dnorm(x, mean = 0, sd = 1, log = FALSE)
+
+#p-values for a z(or q) [also called distribution fn]: 
+pnorm(q, mean = 0, sd = 1, lower.tail = TRUE, log.p = FALSE)
+
+#z (or q) values for a p [also called quantile fn]
+qnorm(p, mean = 0, sd = 1, lower.tail = TRUE, log.p = FALSE)
+
+#random values generator (from the dist)
+rnorm(n, mean = 0, sd = 1)
+
+##Similarly, for exponential distribution##
+
+The Exponential Distribution - Density, distribution function, quantile function and random generation for the exponential distribution with rate "r" (i.e., mean = 1/r).
+
+Usage
+dexp(x, rate = 1, log = FALSE)
+pexp(q, rate = 1, lower.tail = TRUE, log.p = FALSE)
+qexp(p, rate = 1, lower.tail = TRUE, log.p = FALSE)
+rexp(n, rate = 1)
+
+```{r}
+x <- seq(0,20,length=3000) 
+#Make a sequence of 3000 evenly spaced numbers from 0 to 20
+
+y <- dexp(x, rate = 1/10)
+#Calculate the y axis points for every value in the sequence of x, using an exponential probability distribution density function
+
+plot(x, y, type = "l")
+#Plot input - X,Y coordinates for all points in x and y vectors
+
+#Note, this can also be plotted in a single step using the "curve" function
+curve(dexp(x, rate = 1/10), xlim = c(0,20))
+
+pop <- rexp(1000, rate = 1/10)
+#Randomly sampling 1000 values from a exp. prob. dist. 
+
+mean(pop)
+
+hist(pop)
+```
+Key takeaway: learning how to use d, p, q and r functions to work with distributions
+######################################################################
+
+Sampling from populations:
+```{r}
+example <- sample(pop,30)
+mean(example)
+var(example)
+sd(example)
+
+hist(example)
+```
+Key takeaway: learning how to use the sample function
+######################################################################
+
+*Sampling distributions* - distribution obtained by multiple measures of a descriptive statistic (ex. mean) from a population using repeated sampling.
+
+As sample sizes increase, variance in sampling dist reduces.
+
+Why build a sampling distribution?
+
+```{r}
+Sampling.dist <- c()  #creating an empty vector
+n <- 30               #sample size
+iterations <- 10000   #number of loop iterations
+
+for (i in 1:iterations){
+  Sampling.dist[i] = mean(sample(pop, n))
+}
+
+mean(Sampling.dist)
+var(Sampling.dist)
+sd(Sampling.dist)
+
+hist(Sampling.dist)
+```
+Key takeaways: 
+
+0. Building a for loop
+
+1. The shape of a sampling distribution is independent of the statistical population so long as the sample size is sufficiently large.
+
+Specifically, this independent shape is that of a normal distribution, which lends itself very well to a lot of inferential stats.
+
+2. The variance of a sampling distribution increases as the number of sampling units in the sample decreases.
+######################################################################
+
+We can't always take the liberty to sample a population of interest 10,000 times over at a sample size of 30. In fact, most often we conduct studies that contrast different populations (or treatments). For example, if we wanted to conduct a study with 24 treatment groups, and needed to collect 10,000 samples of sample size 30 - we would need about 2000 hours of work to collect the data, even if every sampling unit took only one second to record.
+
+Can we estimate this from a single sample?
+
+In order to estimate the sampling distribution (or any other normal distribution), we need 2 parameters - Mean & Standard deviation (do you remember the special name for the standard deviation of a sampling distribution?)
+
+```{r}
+n <- 30                       #resetting sample size
+example <- sample(pop,n)      #sample data from population
+Mean <- mean(example)         #Mean of the sample = sampling dist mean
+Std.err <- sd(example)/sqrt(n)#std.err = sampl.dist standard deviation
+
+y.sampl.dist <- dnorm(x, mean = Mean, sd = Std.err)
+#estimated sampling distribution
+
+hist(Sampling.dist, freq = FALSE, ylim = c(0,0.3));lines(x, y.sampl.dist) 
+#Note that this is probability density being plotted in the histogram, by setting frequency=false
+```
+
+Key takeaways
+
+1. Sampling distributions (as used in inferential stats) are estimated distributions that are built to resemble what we would arrive at if we actually repeatedly sampled populations. 
+
+2. With small sample sizes, we make very poor estimates of what a population looks like, but at a decent size (n >= 30), we can make decent estimated sampling distributions.
+
+3. Rather than giving us perfect information about what a population looks like, sampling distributions give us a good sense of what to expect if we re-sample a population.
+######################################################################
+
+One way of looking at the information we get from our sampling distribution is to create a plot of the pdf as we did above. Another simple tactic used to summarize this information is to describe the range of the sampling distribution estimated.
+
+However, this is not straightforward in an estimated probability distribution - the range of any such distribution is infinite (even if most of the probability is concentrated in a small range).
+
+A trick used to get around this is to describe the range of 'most' of the distribution, instead of all of it. For example, in 95% confidence intervals, we describe the range that covers 95% of the area under the curve in the distribution (excluding a 2.5% on each tail).
+
+Below, we write a function that calculates the confidence interval for a given sample.
+
+```{r}
+CI <- function(samp,ci){              #Define a fn 'CI', with 2 parameters
+  p <- (1-ci)/2                       #Use the CI value to calculate a p value
+  SE <- sd(samp)/sqrt(length(samp))   #Calculate sample's std error
+  CI_L <- qnorm(p, mean(samp), SE)    #Calculate lower CI level
+  CI_U <- qnorm(1-p, mean(samp), SE)  #Calculate upper CI level
+  return(c(CI_L, CI_U))               #return (or print) calculated CI values
+}
+
+CI(example, 0.95)
+```
+
+Key takeaways: Writing simple functions
+
+Remember - Rather than giving us perfect information about what a population looks like, sampling distributions give us a good sense of what to expect if we re-sample a population.
+
+Single sampling events do not even necessarily include the population mean, and that isn’t an assumption that we should hold on to. 95% (for example) confidence intervals would include the population mean for 95% of the sampling iterations. 
+######################################################################
+
+Small sample sizes and flexible distributions:
+
+We've established that at really small sample sizes, we do not do a good job of estimating sampling distributions. How do we do inferential stats when we are constricted to small sample sizes?
+
+To better estimate sampling distributions in these situations, we use a different distribution - known as the t-distribution. The t-distribution mostly resembles the normal distribution at large sizes, but at small sizes, it tends to look different, with more probability attributed to the tails (or extremes of the population).
+
+##R codes for the standardized t dist##
+
+The Student's t Distribution - Density, distribution function, quantile function and random generation for the t distribution with df degrees of freedom (and optional non-centrality parameter ncp).
+
+Usage
+dt(x, df, ncp, log = FALSE)
+pt(q, df, ncp, lower.tail = TRUE, log.p = FALSE)
+qt(p, df, ncp, lower.tail = TRUE, log.p = FALSE)
+rt(n, df, ncp)
+
+```{r}
+n <- 20 #resetting sample size
+
+
+#Adjustments to standardize sampling dist 
+Std.sampl.dist <- (Sampling.dist - mean(Sampling.dist))/sd(Sampling.dist)
+#hist(Std.sampl.dist, freq = FALSE, ylim = c(0,0.5))
+
+#Estimating standardized sampling distributions, for the normal and t dist
+xx <- seq(-3,3,length=300)
+
+y.norm <- dnorm(xx)
+y.t    <- dt(xx, n-1)
+#estimated sampling distribution
+
+hist(Std.sampl.dist, freq = FALSE, ylim = c(0,0.5))
+  lines(xx, y.norm, col = "blue")
+  lines(xx, y.t, col = "red") 
+  legend(3, 0.4, 
+       legend=c("Normal distribution", "T Distribution"),
+       col=c("blue","red"), pch = c(20,20))
+```

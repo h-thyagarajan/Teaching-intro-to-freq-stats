@@ -1,0 +1,182 @@
+---
+title: "Correlations, regressions"
+author: "HT"
+date: "03/11/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+So far, we've discussed tests with one categorical variable (usually independent), and one numerical - for example, one and 2 sample t tests. What if both the independent and dependent variables were continuous variables?
+
+There are two types of statistical tests for data-sets with two numerical variables; Correlations and Linear regressions. Both use the same type of data, but their goals and analyses are different. 
+
+In this doc, we're going to work through some examples of both, and then set ourselves up to think about linear models, as an extension of linear regressions.
+
+**Correlations*
+
+The strength of association between the two numerical variables is measured by Pearson's correlation coefficient (correlation coefficient for short). The estimate of the correlation coefficient based on a sample is often given the letter r, and, for the purposes of hypothesis testing, the population parameter is given the greek letter ⍴ (rho).
+
+The correlation coefficient can take on values anywhere from ⍴=-1 to ⍴=1. A value of ⍴=-1 indicates a perfect negative correlation, a value of ⍴=0 indicates no association, and a value ⍴=1 indicates a perfect positive correlation.
+```{r}
+moviedata <- read.csv(file="/Users/ht/0/Stats/practice_data/MovieData.csv")
+plot(moviedata$TotalCosts, moviedata$TotalRevenue)
+```
+Calculating ⍴ (rho - also denoted as r when using english instead of the greek alphabet) -
+
+Multiple ⍴ calculations exist - we will work with the simplest version today, Pearson's correlation coefficient. (Other variations - Kendall, Spearman use rank based correlation scores rather than raw data based scores. This is helpful when assumptions of normality of the 2 variables do not hold).
+
+Some assumptions:
+- Each pair of numerical values is measured on the same sampling unit
+- Numerical values come from continuous numerical distributions with non-zero variation
+- If there is an association between the variables, it is a straight line
+
+Here, ⍴ = Σ [(x-mean(x)).(y-mean(y))]/sqrt[Σ{(x-mean(x))^2.(y-mean(y))^2}]
+
+```{r}
+moviedata$tcdev <- moviedata$TotalCosts - mean(moviedata$TotalCosts)
+moviedata$trdev <- moviedata$TotalRevenue - mean(moviedata$TotalRevenue)
+
+r = (sum(moviedata$tcdev*moviedata$trdev))/sqrt(sum((moviedata$tcdev)^2)*sum((moviedata$trdev)^2))
+```
+Now that we have this ⍴ value, we need to work out what this is telling us. First of all, ⍴ is very close to 1, suggesting a strong positive correlation. Now, is this statistically significant, or merely a chance event? To answer this we need to return to the language of frequentist statistics - aka, define a null hypothesis and test if this our sample statistic belongs to the null distribution or not.
+
+What is the null distribution for a correlation test? It turns out to be a t-distribution - correlation tests are just a special case of a single-sample t-test. How do we calculate the t score then?
+
+Much like for standard t tests, where we standardized the t statistic of our sample(s) by subtracting the null hyp and dividing by std error, we calculate the t stat from a ⍴ by subtracting the null (⍴=0) and dividing by standard error.
+
+Analytically, the standard error expression for such a sample is given by :
+
+S.E = sqrt[(1-⍴^2)/(n-2)]
+
+t = (⍴-0)/S.E = ⍴/S.E
+
+So, t = ⍴/sqrt[(1-⍴^2)/(n-2)]
+Or, t = ⍴*sqrt[(n-2)/(1-⍴^2)]
+
+```{r}
+t = r*sqrt(length(moviedata$trdev) - 2)/sqrt(1-r^2)
+p <- 2*(1-pt(t, length(moviedata$trdev) - 2))
+```
+Now obviously, when actually doing these tests, we use packages rather than actual equations. These two lines of code below can mirror all the chunks we wrote above. 
+
+cor - gives you ⍴
+cor.test - calculates t and gets a p value from it.
+
+You'll note that our p value calculation produced an answer of 0 - this means that the probability was so low that it broke the pt function. The same thing happens when we use cor.test - the p value is so low that R simply returns that p is lower than the smallest number R can use in these calculations.
+
+What does this tell us? It tells us to reject the null hypothesis that there is no correlation between costs and revenue.
+```{r}
+cor(moviedata$TotalCosts, moviedata$TotalRevenue, method="pearson")
+cor.test(moviedata$TotalCosts, moviedata$TotalRevenue, method="pearson")
+```
+**Regressions**
+
+From a teaching perspective, the linear regression is a really important test because it is the first place where we learn about functions for making predictions, and is the stepping stone to the larger world of what are called linear statistical models.
+
+The focus of linear regressions is prediction. As such, one variable is designated as the predictor variable and the other as the response variable.
+
+Sampling error is considered to only occur in the response variable and not in the predictor variable, which is a key distinction from correlation tests.
+
+In experimental studies, the prediction reflects a causal relationship between the predictor (independent) variable (variable manipulated by the researcher) and the response (dependent) variable (measured response following the manipulation). The terms independent variable and dependent variable should never be used for observational studies. 
+
+In observational studies, the choice of what variable is designated as the predictor versus response variable depends on the research question. The response variable is always the variable that you want to make predictions about.
+
+To explore how this works, lets return to the dataset used above.
+```{r}
+plot(moviedata$TotalCosts, moviedata$TotalRevenue)
+```
+
+A linear regression seeks to break down variation in the response variable into signal and noise. Signal - variation in the Y axis caused by change in the X axis. Noise - variation in the Y axis independent of the X. Noise is also referred to as residual variation - aka the residues left behind after we explain some of the Y variation through the X. 
+
+This is a linear regression because it is 
+
+a) linear (i.e. the prediction model takes the form of a linear equation -> y = mx+c) and, 
+b) it attempts to regress data - separate data from complex state of linear equation + error and noise (or other variables) to it's component parts.
+
+What does explaining variation mean? For example, if we plot the age of 20 children in the Y axis and their ages in the X axis - we will see height increase with age. Can we explain change in the Y using change in the X? If a linear equation can perfectly capture all the points in the plot, than it explains 100% of the variation in the Y axis using the X. However, this is usually not the case - through measurement error and stochastic variation you will usually only see some percentage of variation in the Y explained by the X.
+
+Essentially, we are looking to draw a "best fit" line (y=mx+c) through this cloud of (paired*) points. This best fit line is the best fit in the sense that it is best at reducing the amount of noise left beyond the model. To do this, we have to find the best pair of "m" and "c" such that we minimize residues, and we need to quantify residues so we can find a way to minimize it.
+
+Since residues are the magnitude of deviation of the data from the model at every point, we use a "least squares" approach (get rid of all negative values) method to calculate it.
+
+So for every pair of m and c values, we can draw a line and look at the residues between the points and the lines - we then calculate mean squares of residues (RMSE) and choose the line with minimum (least) RMSE.
+
+RMSE -> Root mean squared error
+RMSE = sqrt(mean((observeds - predicteds)^2))
+
+*paired in the sense that all x and y readings are paired by a single sampling unit.
+
+Let's plot our data with some arbitrary lines (linear models) and estimate the RMSE for them.
+```{r}
+plot(moviedata$TotalCosts, moviedata$TotalRevenue);abline(a=1000, b=0)
+pred_1 <- 0*moviedata$TotalCosts + 1000
+RMSE_1 = sqrt(mean((moviedata$TotalRevenue - pred_1)^2))
+
+plot(moviedata$TotalCosts, moviedata$TotalRevenue);abline(a=3000, b=-1)
+pred_2 <- (-1)*moviedata$TotalCosts + 3000
+RMSE_2 = sqrt(mean((moviedata$TotalRevenue - pred_2)^2))
+
+plot(moviedata$TotalCosts, moviedata$TotalRevenue);abline(a=0, b=1)
+pred_3 <- 1*moviedata$TotalCosts + 0
+RMSE_3 = sqrt(mean((moviedata$TotalRevenue - pred_3)^2))
+```
+
+As you can see, our visual intuition of a good fit matches pretty well with the RMSE outputs - better fits have lower RMSE scores.
+
+In computing stats, we replace the m and c by coefficients b0, b1, b2...bn. These are called beta coefficients. b0 is the constant c, and b1, b2 etc are slope coefficients, as is m. You might also see slope denoted as β and y-intercept as α in mathematical textbooks.
+
+For a single predictor variable, we say
+
+y = b0 + b1*x + e 
+(e:residual error)
+
+For multiple predictors, 
+y = b0 + b1x1 + b2x2 + ... + bnxn + e
+
+Now, since
+y = b0 + b1*x + e 
+
+We know that 
+e = y-b0-b1*x
+
+Which means that sum of square errors (SSE) is given by
+Σe^2 = Σ(y-b0-b1*x)^2
+
+It is possible to trial and error a large number of lines to get the best fit line, but this is computationally inefficient. Instead, we use analytical solutions of this equation to find the line with the minimum RMSE given a dataset. 
+
+Eseentially, we want to minimize sum of squares S, using the parameters b0 and b1. Focussing on b1 (slope) first, we simply differentiate S with respect to b1 and the set the differentiated equation to be equal to zero in order to minimize. This gives us the b1 estimate, and we use the linear equation to then estimate b0.
+
+Detailed proof here: https://www.amherst.edu/system/files/media/1287/SLR_Leastsquares.pdf
+
+Solving this equation, we get that the best fit line has 
+b1 = ⍴(x,y) * sd(y)/sd(x); &
+b0 = mean(y) - b1*mean(x)
+
+⍴(rho) - Pearson's correlation coeff.
+sd - standard deviation
+
+this can also be rewritten as:
+b1 = sd(x,y)/sd(x)^2
+
+sd(x,y) - covariance in x and y
+sd(x)^2 - Variance in x
+
+Using our analytical solutions, let us calculate b1 and b0 for our dataset & find the best fit line.
+```{r}
+b1 <- cov(moviedata$TotalCosts, moviedata$TotalRevenue, method="pearson")/var(moviedata$TotalCosts)
+#covariance(x,y)/var(x)
+
+b0 <- mean(moviedata$TotalRevenue)-b1*mean(moviedata$TotalCosts)
+#mean(y) - b1*mean(x)
+
+#Calculate RMSE of the line with these b0, b1 parameters
+pred_bestfit <- b1*moviedata$TotalCosts + b0
+RMSE_bestfit = sqrt(mean((moviedata$TotalRevenue - pred_bestfit)^2))
+```
+
+Now we have a best fit line. So what? Is there a relationship between predictor and response? Yes, seemingly - there seems to be a 1:1 change in y with respect to x.
+
+Is it significantly different from no relationship? We re-enter the world of frequentist stats here - and describe what linear models are! More on this in the next script.

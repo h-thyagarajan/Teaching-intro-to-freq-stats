@@ -1,0 +1,182 @@
+---
+title: "Linear models-2"
+author: "HT"
+date: "03/11/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+LM's basics recap:
+
+In the last script we conducted hypothesis tests on the beta coefficients, 'b0' and 'b1' using sampling distributions estimated from our data.
+
+We checked our model to see
+
+-   if it broke the assumption of normally distributed residuals, &
+
+-   if our sampling distributions had from strong correlations between parameters (and tested some basic remedies for this issue)
+
+Let's reload our data. This time, we're going to test if we can use the linear model to predict response variable values using our equation. To do this, we're going to subset our data and use a part of it to create the model. This model will then be used to predict the response variable values for the data that was not included, and the accuracy of these predictions can be tested.
+
+```{r}
+moviedata <- read.csv(file="/Users/ht/Stats/practice_data/MovieData.csv")
+
+#create new data columns that can be used to create centred models
+moviedata$tcdev <- moviedata$TotalCosts - mean(moviedata$TotalCosts)
+moviedata$trdev <- moviedata$TotalRevenue - mean(moviedata$TotalRevenue)
+
+#Let's create a data partition - splitting the data randomly into 2 sets - one that has 75% of the data and one that has 25% of it.
+serial.num <- sample(seq(1,154, length=154), floor(0.75*154)) 
+
+traindata <- moviedata[serial.num,]
+testdata <- moviedata[-serial.num,]
+
+#Run a linear model
+model_centred <- lm(trdev~tcdev, data = traindata)
+summary(model_centred)
+```
+
+First off, we should try visualizing what the model is telling us about the data.
+
+```{r}
+#use abline and allow it pull parameters from your model to contruct the model line
+plot(trdev ~ tcdev, data = traindata) + abline(model_centred) 
+
+#Let's overlay points that were left out of traindata to see how good this model looks relative to all of the data
+plot(trdev ~ tcdev, data = traindata) + abline(model_centred) + points(testdata$tcdev, testdata$trdev, col='red')
+```
+
+Pretty good already, yes? Without using all the data available, we were able to construct a model that looks like it visually accounts for all the data.
+
+Having done that, let's now predict the response variable points using our line. Quite simply, we will substitute values of X from testdata and calculate Y values using our linear equation:
+
+y = b0+b1x
+
+```{r}
+b0 <- model_centred$coefficients[1]
+b1 <- model_centred$coefficients[2]
+
+#Manually calculating our predictions
+preddata <- b0+b1*testdata$tcdev
+
+#Alternatively, you could be a cool kid and just use the inbuilt magic package - 'predict'!
+preddata1 <- predict(model_centred, newdata = testdata)
+
+#You can look at preddata and preddata1 to see that they are the same
+```
+
+How good were these predictions? This is best measured using our existing measure of error, RMSE.
+
+(Overall quality of the linear regression fit can also be assessed using the 
+Residual Standard Error (RSE) - displayed in model summaries. The RSE represents roughly the average difference between the observed outcome values and the predicted values by the model. Dividing the RSE by the average value of the response variable will give you the prediction error rate, which should be as small as possible for a good model.)
+
+```{r}
+#install.packages("caret") 
+library(caret)
+#package that helps with calculations for regressions - Caret - Classification And REgression Training
+
+RMSE(preddata, testdata$trdev) #Calculates RMSE for test data
+
+#for comparison, let's look at the RMSE of the model relative to the training data that we used to write the model
+sqrt(mean(model_centred$residuals^2))
+
+R2(preddata, testdata$trdev) #Calculates r^2 (or rho^2)
+```
+
+So this is pretty cool! You took a training dataset and extrapolated it to produce predictions for a test data set - and those predictions were pretty darn good! Nicely done, this is now the world of artificial intelligence.
+
+Another really cool thing that we can get from the predict function, is confidence intervals of our linear model! We previously used confint to calculate the confidence intervals of b0 and b1, but predict allows us to calculate confidence intervals for every predicted Y point.
+
+```{r}
+conf_interval <- predict(lm(TotalRevenue~TotalCosts, data = moviedata), newdata = data.frame(TotalCosts = seq(0, 3500, by = 10)), interval = "confidence", level = 0.95)
+
+plot(TotalRevenue~TotalCosts, data = moviedata, xlab = "Cost", ylab = "Revenue"); abline(model)
+lines(seq(0, 3500, by = 10), conf_interval[,2], col = "blue", lty = 2)
+lines(seq(0, 3500, by = 10), conf_interval[,3], col = "blue", lty = 2)
+```
+
+Can we do linear regressions with multiple predictor variables? Yes, the math gets more complicated - but the packages can do all that for you!
+
+```{r}
+#install.packages("datarium")
+data("marketing", package = "datarium") 
+#different way to input data - if you need it
+summary(marketing)
+
+x1_model <- lm(sales ~ youtube, data = marketing); summary(x1_model)
+
+complete_model <- lm(sales ~ youtube + facebook + newspaper, data = marketing); summary(complete_model)
+
+par(mfrow=c(1,2))
+plot(sales ~ youtube, data = marketing, xlab = "youtube", ylab = "sales"); abline(complete_model)
+plot(sales ~ youtube, data = marketing, xlab = "youtube", ylab = "sales"); abline(x1_model)
+
+#Visualizing 2 predictor variables with 3d plot
+#scatter3d needs rgl and car
+library("rgl")
+scatter3d(sales ~ facebook*youtube, data=marketing, fit=c("linear",  "additive"))
+
+library("scatterplot3d")
+sp3d <- scatterplot3d(marketing$youtube, marketing$facebook, marketing$sales)
+#plane3d(x2x3_model, lty = "dashed", lty.box = NULL, draw_lines = TRUE, draw_polygon = FALSE, polygon_args = list(border = NA, col = rgb(0,0,0,0.2)))
+```
+Sure, we can add a million predictor variables to a regression to try and explain more variation in the response. That said, how can we check if new variables added are actually providing us new information not covered in the existing predictor variables.
+
+Partial regression plots – also called added variable (AV) plots are a diagnostic plot for multivariate linear regression models. 
+
+Steps to make one:
+1. Compute the residuals of regressing the response variable against the independent variables but omitting X(i) - your predictor in question.
+2. Compute the residuals from regressing X(i) against the remaining independent variables.
+3. Plot the residuals from (1.) against the residuals from (2.)
+
+These two sets of residuals reflect the part of each (Y and X(i)) that is not linearly associated with the other predictor variables - aka:
+
+We do a regression of resid(Y|X2) on resid(X1|X2) to see if “the part of X1 not contained in X2” can further explained “the part of Y not explained by X2". 
+
+There are three possibilities:
+
+a - “horizontal band” - shows that X1 contains no additional information useful for the prediction of Y beyond that contained in and provided for by X2
+
+b - “linear band with a non-zero slope” - indicates that “the part of X1 not contained in X2” is linearly related to “the part of Y not explained by X2” alone. That is, adding the the X1 variable to the model predictors is providing useful information.
+
+c - “curvilinear band” - indicates that, like the case (b) previously, X1 should be added to the model already containing X2. However, it further suggests that the inclusion of X1 is justified but some power terms – or some type of data transformation are needed. The added-variable plots play the role that we use scatter diagrams for in simple linear regression; they would tell if data transformation or if certain polynomial model is desirable.
+
+Detailed notes on this idea here: http://www.biostat.umn.edu/~chap/F19-MLR-Diagnostics.pdf
+
+```{r}
+x1resp_model <- lm(youtube ~ facebook + newspaper, data = marketing); summary(x1resp_model)
+
+x2x3_model <- lm(sales ~ facebook + newspaper, data = marketing); summary(x2x3_model)
+
+x1av_model <- lm(resid(x2x3_model) ~ resid(x1resp_model))
+x1av_plot <- plot(resid(x2x3_model) ~ resid(x1resp_model)); abline(x1av_model)
+
+#library(car)
+avPlots(complete_model) #from the car package - plots all the added variable plots
+```
+Amazing. We now know how to make regressions, how to make them
+
+```{r}
+```
+
+
+Summary of lm functions:
+
+lm - Estimates a linear model by least squares. Returns a fitted model object of class lm containing parameter estimates plus other auxiliary results for use by other functions.
+
+plot - Produces model checking plots from a fitted model object.
+
+summary - Produces summary information about a fitted model, including parameter estimates, associated standard errors, p-values, r2, etc.
+
+anova - Used for model comparison based on F-ratio testing.
+
+AIC - Extract Akaike’s information criterion for a model fit.
+
+residuals - Extract an array of model residuals from a fitted model.
+
+fitted - Extract an array of fitted values from a fitted model object.
+
+predict - Obtain predicted values from a fitted model, either for new values of the predictor variables, or for the original values. Standard errors of the predictions can also be returned.

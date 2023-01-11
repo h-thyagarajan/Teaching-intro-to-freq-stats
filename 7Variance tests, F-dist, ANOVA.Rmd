@@ -1,0 +1,311 @@
+---
+title: "Variance tests, F-dist, ANOVA"
+author: "HT"
+date: "03/11/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Much of our focus so far has been looking at mean values. But there are many situations where the key information is in the variance rather than the mean.
+
+To evaluate whether variances are different between groups, we need a different null distribution than used for means. We compare means using estimated sampling distributions - where the Central Limit Theorem allows us to estimate the sd of the sampling distribution (standard error). Even this estimation though, relies on the fact that an actual sampling distribution created by manual sampling would give us a precise measure with a shape independent (normal) distribution. We can check if the same happens with a distribution of sample variances. 
+
+
+```{r}
+pop <- rexp(1000, rate = 1/10)
+#Randomly sampling 1000 values from a exp. prob. dist. 
+
+var.dist <- c()       #creating an empty vector
+means.dist <- c()     #creating an empty vector
+n <- 30               #sample size
+iterations <- 10000   #number of loop iterations
+
+for (i in 1:iterations){
+  means.dist[i] = mean(sample(pop, n))
+  var.dist[i] = var(sample(pop, n))
+}
+
+mean(means.dist); mean(var.dist)
+var(means.dist); var(var.dist)
+
+means.dist_hist <- hist(means.dist)
+var.dist_hist <- hist(var.dist)
+
+plot(means.dist_hist, col=rgb(0,0,1,1/4), xlim = c(0,500), freq = F)
+plot(var.dist_hist, col=rgb(1,0,0,1/4), freq = F, add=T)
+legend(300, 0.18, legend=c("Means Dist", "Var Dist"), col=c("blue", "red"), lty=1:1, cex=0.8)
+```
+
+The comparison of two variances is instead done using their ratio. For example, if the variance in one group was varA and the variance in another group was varB, then the ratio of variances statistic is F = varA/varB (F - named for Ronald Fisher). 
+
+Some trivial ideas that follow from a ratio structure - 
+1 - if the variances are equal (or close), F ~=1.
+2 - F can never be negative, as a ratio of 2 positive numbers.
+
+The F dist looks like a chi-sq distribution. In order to visualize it, we simply need an arbitrary x axis, and the degrees of freedom of the numerator and denominator groups. For example, the following is a F-dist for 2 groups with 31 sampling units (hence n-1=30 d.o.f.) each.
+
+```{r}
+xx=seq(0,12,length=300)
+y <- df(xx, 30, 30)
+
+plot(xx, y, xlim = c(0,12), type = "l")
+```
+
+If we are simply comparing two arbitrary group variances, we have to calculate the variances first and put the greater variance on the numerator, so as to run a hypothesis test about whether the ratio of the variances are actually significantly different from 1. Due to the shape of the curve, probabilistic hypothesis testing to the left of F=1 is tricky.
+
+However, this is not really where the F statistic is most commonly used. Primarily, it is employed in ANOVAs (Analyses of Variance), and these structurally account for this issue. Before we address how ANOVAs actually do this, it is useful to orient ourselves to what they are and why we need them.
+
+Although an analysis of variance, ANOVAs are used as a statistical test of group means comparisons. We already do this efficiently using a t-test, yes, but t-tests cannot handle more than 2 groups at any given time. 
+
+Given that we accept an error rate of 5% (usually) in our testing systems, conducting multiple pairwise t-tests between several groups (A vs B, B vs C, A vs C, and so on) inflates the chances of incorrect rejection of the null.
+
+The ANOVA provides us with a way to conduct a single test across all groups to see if there are any differences at all between groups (even a single group significantly different from the rest is read by an ANOVA as an overall significant result). If this test does show significant differences, we can then conduct pairwise contrasts* to test which groups are actually different from one another.
+
+* - these contrasts should ideally use corrected alpha error levels, but that is a story for another day.
+
+#############################################################################
+*ANOVA STRUCTURE*
+
+An ANOVA is a type of linear model. The difference is that we have a categorical 'X' variable instead of a numerical predictor variable.
+
+At every point of a classic linear model, the linear regression equation uses the X axis value to calculate a predicted Y value (variation explained), and the difference from the actual Y value can be calculated by subtracting (residual variation).
+
+Here, since the X axis now has categories, our prediction is not done through a linear equation. Instead, the prediction model treats each group mean as the predicted Y value. The variation around the group's mean then gives us the residual variation of the group.
+
+Using this structure, we can 'partition' the total variance in the dataset into two sources of variation:
+
+1. Group variation - The variation among means of the categorical levels (or groups). 
+
+2. Residual variation - The variation among sampling units within a categorical level.
+
+
+Group variation (Mean Sq. Groups - MSG) is calculated as sum of squares group (SSG) divided by the d.o.f. for groups (DFG) 
+
+MSG = SSG/DFG
+
+SSG = Σ[i] {n(i)*(groupmean(i) - grandmean)^2}
+DFG = k-1 (k is the number of groups)
+
+grandmean - mean of all the data across all groups
+
+Residual variation (Mean Sq. Error - MSE) is calculated as sum of sq. error (SSE) divided by d.o.f. of error (DFE)
+
+MSE = SSE/DFE
+
+SSE = Σ[i]Σ[j] {(datapoint(i,j) - groupmean(i))^2}
+    = Σ[i] {var(group(i))*n(i)}
+DFE = n-k (n is the total number of sampling units)
+
+As a table:
+
+    Source of variation	  df       SS                                   MS            
+
+1.	Groups (between)      k-1     Σ[i]{n(i)*(mean(i)-grandmean)^2}      SSG/k-1
+2.	Error	 (within)       N-k	    Σ[i]{var(i)*n(i)}                     SSE/N-k
+Total variation	          N-1	    Total variance*N-1                    Total variance
+
+(Between and within are alternative terms used by some books, in place of groups and error)
+
+Let's try calculating this for a dataset.
+```{r}
+summary(PlantGrowth)
+str(PlantGrowth)
+boxplot(weight~group, data = PlantGrowth)
+
+#Given that we want means (predicted Y values) and the variance around them (residual variation), it is useful to further visualize our data that way. 
+
+#Uncomment the following 3 lines to run the plotmeans function
+#install.packages("bitops")
+#install.packages("gtools")
+#library("gplots")
+
+plotmeans(weight~group, data = PlantGrowth, mean.labels = T, connect = F,
+          p=0.95, ci.label = T, digits = 2, ylim = c(2,7), 
+          xlab = "Treatment", ylab = "Weight",
+          main = "Weight Means, 95% CI")
+
+#Calculating variance partitions
+means     <- tapply(PlantGrowth$weight, PlantGrowth$group, mean)
+vars      <- tapply(PlantGrowth$weight, PlantGrowth$group, var)
+lengths   <- tapply(PlantGrowth$weight, PlantGrowth$group, length)
+grandmean <- mean(PlantGrowth$weight)
+
+SSG = lengths[1]*(means[1]-grandmean)^2 +                                           lengths[2]*(means[2]-grandmean)^2 +                                           lengths[3]*(means[3]-grandmean)^2
+DFG = nlevels(PlantGrowth$group)-1
+
+SSE = (lengths[1]-1)*vars[1]+                                                       (lengths[2]-1)*vars[2]+                                                       (lengths[3]-1)*vars[3]
+DFE = length(PlantGrowth$weight) - nlevels(PlantGrowth$group)
+
+#Why do I use n-1 for SSE instead of n? Since sample variance is calculated by R as Σ{(y(i)-Y)^2/n-1}, and we are interested in Σ{(y(i)-Y)^2}, I multiply by n-1 to get the denominator removed. This issue does not happen with SSG, where we calculate with means.
+
+MSG = SSG/DFG
+MSE = SSE/DFE
+```
+
+So far, this is not much different from a linear model that partitions variance into explained and residual variation. However, unlike a linear model where our predictions are neatly summarized into b0 and b1 parameters, we don't have such a system here for hypothesis testing - making it necessary to create a different hypothesis test.
+
+Now, given that we have 2 variances - MSG and MSE, we can compare whether they are similar or significantly different using an F statistic.
+
+F statistic:
+
+F = MSG/MSE 
+
+If F > 1 (aka if our hyp test is significant), then there is much more variation between the groups, then there is error within the groups. One or more groups are actually different from the rest (or all of them could be different, even).
+
+If F < or = 1 then there is more error variation than variation between groups - suggesting that
+
+The null distribution just needs an x axis and 2 d.o.f.s
+DFG = k-1
+DFE = n-k
+
+Hypotheses
+HO: μ1=μ2=...=μk-1=μk
+H1: μ1≠μ2≠...≠μk-1≠μk
+
+```{r}
+xx=seq(0,10,length=300)
+y_null <- df(xx, DFG, DFE)
+
+F <- MSG/MSE
+p <- 1-pf(F, DFG, DFE)
+plot(xx, y_null, xlim = c(0,10), type = "l"); abline(v=F)
+```
+Ok, so there is a significant difference in there somewhere between those groups. We need to make pairwise comparisons between ctrl, trt1 and trt2 to find out where the difference(s) are.
+
+Before doing that, let's look at how R makes packages for these kind of tests, so you don't have to always do all these calculations by hand.
+
+Now remember, ANOVAs are a kind of linear model, so we can run this code through the lm package. To see how it actually does this, we can look at the fitted values (or predicted Y values) to see how the lm treats a categorical X variable.
+
+If we want more specific information, such as the SSG and SSE, we can use an ANOVA package (like aov) to provide more info on the test.
+```{r}
+model <- lm(weight~group, data = PlantGrowth)
+#Let's take a look at the fitted values of the model, where it treats the data like a standard regression and provides predicted Y values for all Xs
+model$fitted.values
+
+summary(model)
+#Ignore the t test side of the linear model - we are interested in the bottom line here. F statistic, DFs and p value. Compare that to what we calculated.
+summary(model)$fstatistic
+
+#You can run an anova using the aov and anova packages in R. Both can be applied directly to data - and if you run a linear model first, you can run an anova on the model - it simply takes the call function and turns it into the function for anova.
+
+aov(model) #aov provides just sum of squares and dof (aka the variance partition). For info on f and p values, use summary
+summary(aov(model))
+
+anova(model) #a newer package 'anova' will directly give you this information.
+anova(aov(model)) #you can even run an 'anova' on top of an aov for the same output.
+
+#Like linear regressions, the lm package also calculates coefficients for the anovas it runs. However, these are no longer b0 and b1 coefficients, as there is no linear equation. Let's try to see what these coefficients tell us.
+coef(model)
+
+#recall the group mean differences we summarized earlier
+means
+#Does this help interpret ANOVA coefficients?
+```
+Omega squared is a measure of association between the independent and dependent variables in an ANOVA statistic. The interpretation of ω^2 is analogous to the interpretation of r^2 (coefficient of determination) – that is, ω^2 indicates the proportion of variance in the dependent variable that is accounted for by the levels of the independent variable.
+
+ω2 = [SSG − (DFG)*(MSE)]/[SS(Total) + MSE]
+```{r}
+ssg <- anova(model)$`Sum Sq`[1]
+dfg <- anova(model)$Df[1]
+mse <- anova(model)$`Mean Sq`[2]
+sst <- anova(model)$`Sum Sq`[1] + anova(model)$`Sum Sq`[2]
+
+o2 <- (ssg-(dfg*mse))/(sst+mse)
+```
+Moving on to pairwise comparisons (contrasts). We are pretty much going to run t-tests between the 3 groups in pairs and see if they have significant differences, but using a corrected alpha threshold.
+
+Briefly, when we run multiple tests, we inflate the type I error rate (aka inflate alpha).
+
+alpha(inflated)  =  1−(1−alpha)^n,
+n  =  number of hypotheses tested 
+
+Based on this, we formulate a corrected alpha for our hypothesis tests
+
+alpha(Corrected) = 1-(1-alpha)^(1/n)
+
+This is explained in detail below
+##############################################################################
+Type I error (false +ve) occurs when H0 is statistically rejected even though it is actually true, whereas in type II error (false -ve) H0 is statistically accepted but H0 is false. 
+
+In the situation of comparing the three groups, they may form the following three pairs: group 1 versus group 2, group 2 versus group 3, and group 1 versus group 3. A pair for this comparison is called ‘family.’ The type I error that occurs when each family is compared is called the ‘family-wise error’ (FWE). 
+
+The α inflation can occur when the same (without adjustment) significant level is applied to the statistical analysis to one and other families simultaneously. 
+
+For example, if one performs a t-test between two given groups A and B under 5% α error and does not reject H0, the probability of trueness of H0 (the hypothesis that groups A and B are same) is 95%. At this point, let us consider another group called group C, which we want to compare it and groups A and B. 
+
+If one performs another t-test between the groups B and C and its result is also non-significant, the real probability of a non-significant result between A and B, and B and C is 0.95 × 0.95 = 0.9025, 90.25% and, consequently, the testing α error is 1 − 0.9025 = 0.0975, not 0.05. At the same time, if the statistical analysis between groups A and C also has a nonsignificant result, the probability of nonsignificance of all the three pairs (families) is 0.95 × 0.95 × 0.95 = 0.857 and the actual testing α error is 1 − 0.857 = 0.143, which is more than 14%.
+
+More on this here: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6193594/
+
+```{r}
+alpha <- 0.05
+alpha.C=1-(1-alpha)^(1/nlevels(PlantGrowth$group))
+
+pairwise.t.test(PlantGrowth$weight, PlantGrowth$group,
+                p.adjust.method = "none")
+
+#Note that I've set p.adjust.method to none, because I am already adjusting the alpha through correction. You can skip alpha correction if you want to use one of the methods
+
+#Use ?p.adjust in your console to see what kind of adjustment techniques you can use.
+
+#Uncomment lines below to run contrast functions
+#install.packages("contrast")
+#library("contrast")
+
+contrast(model, list(group=c("ctrl", "trt1", "trt2")), list(group=c("trt1", "trt2", "ctrl")))
+```
+Now contrast tests are great because they give you the power to pick the specific comparisons you want to run, reducing the n involved in alpha correction. 
+
+However, the much easier code (and test) that does all this for you is a Tukey's honest significant difference test (Tukey's HSD).
+
+Note that Tukey's HSD already has an inbuilt p value adjustment, so you do not need to calculate a corrected alpha to interpret it.
+```{r}
+TukeyHSD(aov(model))
+
+#Uncomment this package to run the function below
+#library("multcompView")
+generate_label <- function(TUKEY, variable){
+     #Extract labels and factor levels from Tukey post-hoc 
+     Tukey.levels <- TUKEY[[variable]][,4]
+     Tukey.labels <- data.frame(multcompLetters(Tukey.levels)['Letters'])
+     
+     #I need to put the labels in the same order as in the boxplot :
+     Tukey.labels$treatment=rownames(Tukey.labels)
+     Tukey.labels=Tukey.labels[order(Tukey.labels$treatment) , ]
+     return(Tukey.labels)
+}
+
+hsd_labels <- generate_label(TukeyHSD(aov(model)), "group")
+
+#boxplot + significance text
+a=boxplot(weight~group, data=PlantGrowth, ylim=c(3,7.5)); text(c(1:nlevels(PlantGrowth$group)), a$stats[nrow(a$stats),]+0.5, hsd_labels[,1])
+```
+More info on the Tukey's plot making function - 
+https://www.cell.com/cms/10.1016/j.cub.2019.04.059/attachment/51872d01-6f1f-4ad0-897b-557e96d7a1a5/mmc5
+
+Housekeeping tests:
+
+The ANOVA test assumes that, the data are normally distributed and the variance across groups are homogeneous. We can check that with some diagnostic plots. We've already looked at Q-Q plots for residual normality. How do we check homogenous variance.
+
+```{r}
+plot(model)
+#Plot 1 of 4 shows residual distribution across the fitted values - here are fitted values (predicted values) are  simply the level means, so they represent treatments.
+
+#Plot 2 of 4 shows the Q-Q
+```
+
+Points 17, 15, 4 are detected as outliers, which can severely affect normality and homogeneity of variance. It can be useful to remove outliers to meet the test assumptions.
+
+It’s also possible to use Levene’s test to check the homogeneity of variances.
+Shapiro's test can check residual normality.
+
+```{r}
+#Uncomment package to use the function
+#library(car)
+leveneTest(weight ~ group, data = PlantGrowth)
+shapiro.test(residuals(model))
+```
+From the output above we can see that the p-value is not less than the significance level of 0.05. This means that there is no evidence to suggest that the variance across groups is statistically significantly different. Therefore, we can assume the homogeneity of variances in the different treatment groups.

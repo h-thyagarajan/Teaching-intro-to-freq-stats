@@ -1,0 +1,227 @@
+---
+title: "ANOVA-part2"
+author: "HT"
+date: "03/11/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+New dataset: we are given the sex and species of crabs measured for different body size parameters. We want to know what we can learn from sex and species about the crabs, and whether we can predict the size of an arbitrary crab.
+
+```{r}
+library(MASS) 
+data(crabs)
+str(crabs)
+summary(crabs)
+
+#We have 2 categorical variables, our predictors - let's take a look at how the data is spread out.
+table(crabs$sp,crabs$sex)
+
+plot(crabs$sp, crabs$BD)
+plot(crabs$sex, crabs$BD)
+```
+
+Why did we pick just BD out of all possible response variables for analysis? Because they are all super correlated - don't really need to analyze all. See below:
+```{r}
+plot(data.frame(crabs$BD,crabs$CL,crabs$CW,crabs$FL,crabs$RW))
+cor(data.frame(crabs$BD,crabs$CL,crabs$CW,crabs$FL,crabs$RW))
+```
+
+The calculations work a little differently with 2 predictor variables. Sum of squares total 'SST' (which is our proxy measure of variance) is split as follows:
+
+SST = SSR + SSC + SSI + SSE (Rows+Columns+Interaction+Error)
+(Remember previously it was simply SST = SSG + SSE)
+
+#Source of var  |    Sum of Sqs SS     |    DOF   |   Mean sq MS    | F stats
+
+*Rows*                  Σ[j]{n(j)*          j-1        SSR/j-1       MSR/MSE
+               (rowmean(j)-grandmean)^2}
+
+*Columns*               Σ[k]{n(k)*          k-1        SSC/k-1       MSC/MSE
+               (colmean(k)-grandmean)^2}
+
+*Interaction*     SST-(SSR+SSC+SSE)     (j-1)*(k-1)  SSI/(j-1)(k-1)  MSI/MSE
+
+*Error*         Σ[i]{var(group(i))*n(i)}   n-j-k      SSE/(n-j-k)
+
+The use of ω2 can be extended to two-way ANOVA; the general formula is
+ω2 = [SS(source) − (df(source))*(MSE)]/[SS(Total) + MSE]
+
+```{r}
+grandmean <- mean(crabs$BD)
+
+#Create data partitions
+sex <- tapply(crabs$BD, crabs$sex, mean)
+sp <- tapply(crabs$BD, crabs$sp, mean)
+sex.sp <- tapply(crabs$BD, list(crabs$sex,crabs$sp), mean)
+vars <- tapply(crabs$BD, list(crabs$sex,crabs$sp), var)
+lengths <- tapply(crabs$BD, list(crabs$sex,crabs$sp), length)
+
+#Sum of Sqs, DOF
+SSR = as.numeric(sum(lengths[1,])*(sex[1]-grandmean)^2 +                                       sum(lengths[2,])*(sex[2]-grandmean)^2)
+DFR = nlevels(crabs$sex)-1
+
+SSC = as.numeric(sum(lengths[,1])*(sp[1]-grandmean)^2 +                                        sum(lengths[,2])*(sp[2]-grandmean)^2)
+DFC = nlevels(crabs$sp)-1
+
+SSE = (lengths[1,1]-1)*vars[1,1]+
+      (lengths[1,2]-1)*vars[1,2]+                                                   (lengths[2,1]-1)*vars[2,1]+                                                   (lengths[2,2]-1)*vars[2,2]
+DFE = (length(crabs$BD) - nlevels(crabs$sex) - nlevels(crabs$sp))
+
+SST = var(crabs$BD)*(length(crabs$BD)-1)
+SSI = SST - (SSR + SSC + SSE)
+DFI = (nlevels(crabs$sex)-1)*(nlevels(crabs$sp)-1)
+
+#Mean sqs
+MSR = SSR/DFR
+MSC = SSC/DFC
+MSI = SSI/DFI
+MSE = SSE/DFE
+
+#F stats
+F_row = MSR/MSE
+F_col = MSC/MSE
+F_int = MSI/MSE
+
+#p-values
+p_row <- 1-pf(F_row, DFR, DFE)
+p_col <- 1-pf(F_col, DFC, DFE)
+p_int <- 1-pf(F_int, DFI, DFE)
+```
+
+Toit. We now know that species factor and interaction were significant - but the sex factor wasn't.
+
+Now we know that in ANOVA, the predictive 'model' is just a mean value, the mean of the samples of a group. So, given a new observation of a sample belonging to a certain group, we estimate the response variable to be the mean of the samples in that group. The trick is deciding whether belonging to a group matters, i.e., if there is a significant relationship between the groups and the response.
+
+Specifically, for example if neither sex nor species seems to have an effect on BD of crabs, then you would just use the overall ('grand') mean as the 'model', i.e., every crab is the same, plus/minus uncertainty. Alternatively, if those things do matter, then we use their group means, and the uncertainty will be smaller.
+
+Let's estimate the models using the package, starting with the one that includes both variables and interaction. (Note: when interaction is not included in the model, all the calculations remain the same as the model with interactions - we simply do not include the F_int and its p value in the output.)
+
+```{r}
+m2wi <- aov(lm(BD ~ sex*sp, data = crabs)) #two-way aov with interaction
+m2ni <- aov(lm(BD ~ sex+sp, data = crabs)) #two-way aov no interaction
+m1sx <- aov(lm(BD ~ sex, data = crabs))    #one-way aov on sex
+m1sp <- aov(lm(BD ~ sp, data = crabs))     #one-way aov on species
+```
+
+There's no particular reason to do these all at once, except that we know we will want to eventually choose the model that is "best", according to a number of constraints: 
+(1) we prefer models that have lower error; but 
+(2) the lower error, often due to more complexity, should be statistically significant; and 
+(3) the underlying assumptions should be satisfied in order to interpret the model's significance.
+
+Let's start with the one-way model m1sp. This model assumes that species is the important factor, and that if you know species, then your estimate of BD will be the species mean. 
+
+Is the m1sp model valid, i.e., are the differences in the means of groups B and O statistically significant?
+
+```{r}
+anova(m1sp)
+#Three stars. We reject the null hypothesis that "the groups in sp all have the same mean". What about sex?
+
+anova(m1sx)
+#Not significant - we don't reject the null here. Does this mean we remove sex from our models going forward? No - it is possible that sex does not tell us much, but the best model is the one that minimizes the error term.
+
+#For instance, it could be that sex as a factor on it's own does not do anything, but it has an effect in interaction with species.
+
+anova(m2ni)
+anova(m2wi)
+#In both cases, sex remains non-significant, but we can see from the 'with interaction' model that sex:sp interaction has a significant effect.
+```
+So we see what the ANOVA model is, and what is does. How do we pick the right one? We have to find the model with minimal error - a statistically significant difference in sum of sq errors (SSE)
+
+We know that we have a significant interaction term, and that is usually a good indication that it is the best model. Nevertheless, let us compare SSEs.
+
+Here, we get an F statistic between 2 models using the formula:
+
+F = [(SSE1−SSE2)/(dfe1−dfe2)]/[SSE2 /dfe2]
+
+Numerator dof = dfe1−dfe2
+Denominator dof = dfe2
+
+When manually calculating, we have to make sure that the numerator dof is a positive number, but packages will take care of this internally
+```{r}
+SSE_m2wi <- anova(m2wi)$`Sum Sq`[4]
+SSE_m2ni <- anova(m2ni)$`Sum Sq`[3]
+
+dfe_m2wi <- anova(m2wi)$Df[4]
+dfe_m2ni <- anova(m2ni)$Df[3]
+  
+F_comparison <- ((SSE_m2wi-SSE_m2ni)/(dfe_m2wi-dfe_m2ni))/(SSE_m2ni/dfe_m2ni)
+p_comparison <- 1-pf(F_comparison, dfe_m2ni-dfe_m2wi, dfe_m2ni)
+```
+
+So the interaction model is better than the one without, as we expected. Now, obviously, we don't want to write all this code every time.
+
+The R function that helps us to do this is also, somewhat confusingly, anova().
+
+Let's use anova() to see if the difference in error is significant between the top two models.
+
+```{r}
+anova(m2wi, m2ni) #with interaction is better!
+anova(m2ni, m1sp) #adding sex as an effect, without interaction is not better                   than just species as an effect
+anova(m2wi, m1sp) #however with interaction, the model is better than just                      species main effects
+
+#Can we do the entire comparison at once?
+anova(m2wi, m2ni, m1sp, m1sx)
+
+#Unfortunately, the anova package treats this as pairwise comparisons between models listed next to one another - giving erroneous results. So it doesn't compute anything for line 1 (model 1). Line 2 is the difference between model 1 and model 2. Line 3 compares models 2 and 3, but models 1 and 3 are never compared. Line 4 does not compute a difference at all, as we cannot compare 2 one way models (3 and 4) with identical dof.
+```
+Now we want to validate the assumptions. Note that we could have looked at assumptions first, before model selection. Going in this order, we want to check out the assumptions of m2wi. If it looks bad, then we probably will want to revisit to the other models.
+
+```{r}
+plot(m2wi)
+#check the residuals distribution (test of whether group variances are equal) in plot-1 and check the Q-Qplot (plot-2) for normality test.
+
+#library(car)
+leveneTest(BD ~ sex*sp, data = crabs)
+#Not significant = we do not reject that variances are homogeneous
+
+shapiro.test(residuals(m2wi))
+#Not significant = we do not reject residual normality.
+```
+How do we visualize this dataset? The classic option for categorical predictors with numerical responses is a boxplot. This way we get a measure of group central tendency (medians) and the range of the group variances. 
+
+Additionally, it gives us an opportunity to report on significance levels captured from a post-hoc test, now that we know the results of the anova.
+
+```{r}
+boxplot(BD ~ sex*sp, data = crabs) # basic boxplot for BD vs sex*sp
+
+TukeyHSD(m2wi)
+
+#Uncomment this package to run the function below
+#library("multcompView")
+generate_label <- function(TUKEY, variable){
+     #Extract labels and factor levels from Tukey post-hoc 
+     Tukey.levels <- TUKEY[[variable]][,4]
+     Tukey.labels <- data.frame(multcompLetters(Tukey.levels)['Letters'])
+     
+     #I need to put the labels in the same order as in the boxplot :
+     Tukey.labels$treatment=rownames(Tukey.labels)
+     Tukey.labels=Tukey.labels[order(Tukey.labels$treatment) , ]
+     return(Tukey.labels)
+}
+
+hsd_labels <- generate_label(TukeyHSD(m2wi), "sex:sp")
+
+#boxplot + significance text
+a=boxplot(BD~sp*sex, data=crabs, ylim=c(5,25)); text(c(1:(nlevels(crabs$sex)+nlevels(crabs$sp))), a$stats[nrow(a$stats),]+1, hsd_labels[,1])
+```
+As cool as this is, it does not allow us to visualize the interaction effect that we discovered to be significant. This can be plotted using an 'interaction plot'.
+
+In order to think about visualizing an interaction, it is useful to create a mental picture of what interactions are, truly. Interactions are said to occur when 2 (or more) main effects do not act additively. This means that if I know that changing sex from F to M results in a BD increase of 2 units, and changing species from B to O results in a BD increase of 5 units - then I can predict that changing from a B.F individual to O.M individual would result in a BD difference of 7 units (5+2). If there is an interaction, we would expect a deviation from this prediction. 
+
+The interaction plot displays the fitted values (or group means) of the dependent variable on the y-axis while the x-axis shows the values of the first independent variable. Meanwhile, the various lines represent values of the second independent variable.
+
+Two situations are possible - parallel lines, or intersecting lines. If the effects are playing out additively (aka no interaction), we expect these lines to be parallel. If an interaction exists (statistically significant or not) these lines should intersect.
+
+```{r}
+interaction.plot(crabs$sp, crabs$sex, crabs$BD, ylim = c(5,25))
+text(c(1:nlevels(crabs$sp)), a$stats[3,]+1, hsd_labels[,1])
+```
+original resource: https://vislab-ccom.unh.edu/~schwehr/Classes/2011/esci895-researchtools/25-R-lab3-ANOVA.pdf
+
+Interactions, but without main effects:
+```{r}
+```

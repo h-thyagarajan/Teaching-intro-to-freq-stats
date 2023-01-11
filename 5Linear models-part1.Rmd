@@ -1,0 +1,317 @@
+---
+title: "Linear models"
+author: "HT"
+date: "03/11/2022"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+In the last script, we left off at regressions. Here's a quick recap on that:
+
+Linear regressions are attempts to model response variable data as a combination of variation explained by the predictor variable, and residual variance. 
+
+The change in response variable explained by change in the predictor is calculated in the form of a linear equation, in the form:
+
+y = b0 + b1*x + e 
+
+Using a least squares approach, we solve this equation for 'best fit' line's b0 and b1 parameters. The best fit line is the line that minimizes residual variance 'e'.
+
+b1 = cov(x,y)/sd(x)^2; &
+b0 = mean(y) - b1*mean(x)
+
+Having found our b0 and b1, we want to ask if the relationship between variables described by our line is significantly different from zero. Let's load up our data set again, and check up on our estimates.
+```{r}
+moviedata <- read.csv(file="/Users/ht/0/Stats/practice_data/MovieData.csv")
+
+b1 <- cov(moviedata$TotalCosts, moviedata$TotalRevenue, method="pearson")/var(moviedata$TotalCosts)
+#covariance(x,y)/var(x)
+
+b0 <- mean(moviedata$TotalRevenue)-b1*mean(moviedata$TotalCosts)
+#mean(y) - b1*mean(x)
+
+#Calculate RMSE of the line with these b0, b1 parameters
+pred <- b1*moviedata$TotalCosts + b0
+RMSE = sqrt(mean((moviedata$TotalRevenue - pred)^2))
+```
+
+In order to discuss any kind of significance, we need to describe hypotheses and distributions for our test.
+
+Two tests possible in these regressions - one for b0 & b1 each.
+Common hypotheses used for this kind of testing:
+
+Nulls
+H(0) -> β0 = 0; 
+H(0) -> β1 = 0 
+
+Alternates
+H(A) -> β0 =/= 0; 
+H(A) -> β1 =/= 0 
+
+However, we can also test for differences from values other than zero, should we choose to.
+
+In frequentist terms then, what is our sampling distribution here?
+
+We know what it is for a single sample - we go out and sample a population of birds and collect means - build a sampling dist, then get our null and ask questions of significance. 
+
+For a regression, we get parameters - ‘b0’ & ‘b1’ - intercept and slope from our sample (our dataset). The sampling distribution for b1 is the distribution over b1 that occurs when the predictor variable values x(i) are held fixed and the observed outputs are repeatedly sampled. Likewise for b0!
+
+Just like we estimated sampling distributions of means for analysis such as the single sample t-test, we can estimate sampling distributions for b0 and b1 with a sample dataset of paired x-y values. We already have estimates of b0 and b1 from our data, so all we need is the estimate of standard error (aka standard deviation of the sampling dist.) to complete our picture of the sampling distribution
+
+As always, you don't need to know how we reach this equation, but the detailed proof is available here: http://www.stat.columbia.edu/~fwood/Teaching/w4315/Spring2010/lecture_4.pdf
+
+We can show that b1 is normally distributed, with a variance -
+var(b1) <- σ^2 / Σ[(x-mean(x))^2]; which can be rewritten as a std error
+sd(b1) <- sqrt(σ^2 / Σ[(x-mean(x))^2])
+
+where σ^2 is residual variance left in our model. Since we do not know the population level σ^2 value, we estimate it using a familiar parameter labelled s^2.
+
+s^2 here refers to the 'MSE' value 
+(RMSE - root mean sq error, MSE - mean sq error)
+
+s^2 = MSE = SSE/(n-2) -> [SSE = sum of sq. errors, degrees of freedom = n-2]
+s^2 = Σ[{y(observed)-y(predicted)}^2]
+
+Hence, we can write standard error as follows:
+std.err(b1) <- sqrt(s^2 / Σ[(x-mean(x))^2]) = s/sqrt(Σ[(x-mean(x))^2])
+
+This gives us a sampling 't' distribution with degrees of freedom (n-2)
+
+```{r}
+#we already have our b1 estimate, so we just need std error now.
+std.err.b1 <-              RMSE/sqrt(sum((moviedata$TotalCosts-mean(moviedata$TotalCosts))^2))
+```
+
+Unfortunately, because of how R sets up the t distribution functions to be standardized, we can't plot this sampling dist. However, we can calculate the t-statistic for our sample.
+
+t = (b1 - null_hyp)/std.err.b1
+
+Remember, our null_hyp is β1 = 0. So,
+
+t = b1/std.err.b1
+```{r}
+t1 = b1/std.err.b1
+p1 = 2*(1-pt(t1, length(moviedata$TotalCosts)-2))
+```
+Congratulations, you have just completed running your first(?) linear model.
+
+Again, like with the correlations, we see a p value of 0, because it is so low that R is not able to calculate it. Let's see if the inbuilt function in R calculates the same as us!
+
+```{r}
+model <- lm(moviedata$TotalRevenue~moviedata$TotalCosts)
+summary(model)
+#Running this line will provide a lot of output* that can be overwhelming. We can specifically zoom in on what we want using the next line.
+#* - More on this output at the bottom of script.
+summary(model)$coefficients
+
+#Alternatively, grab a package called arm and try display
+#install.packages("arm")
+#library(arm)
+display(model)
+
+#arm also allows us to looks at the model coefficients and their standard errors.
+coefplot(model, intercept=TRUE, vertical=FALSE)
+#Now this plot looks really absurd, due to the high level of std error in the intercept's sampling distribution. Not sure why this is.
+confint(model) #shows the wide wide confidence interval for intercept
+
+#if well organized info is what you want, jtools will give you a model 'summ'
+#install.packages("jtools")
+#library(jtools)
+summ(model)
+```
+Again, we see p < 2e-16 - the lowest value R can calculate.
+
+Because I was concerned that the math was getting too mathy, I completely sidestepped explaining how we estimate the sampling distribution for b0. But now that you have confidently fought your way to this point, let me give you that equation as well.
+
+Like b1, b0 has a normal sampling distribution, which can be used if the population level error variance is known. If not, it can be estimated using a t sampling distribution with n-2 d.o.f. Usually, population error variance is unknown - so let us work with the estimation.
+
+std.err(b0) = RMSE*sqrt[(1/n)+(mean(x)^2/Σ[(x-mean(x))^2])]
+
+Super quick, let's run through the calculations for this
+```{r}
+#we already have our b0 estimate, so we just need std error now.
+std.err.b0 <-RMSE*sqrt((1/length(moviedata$TotalCosts)) + (mean(moviedata$TotalCosts))^2/sum((moviedata$TotalCosts-mean(moviedata$TotalCosts))^2))
+
+t0 = b0/std.err.b0
+p0 = 2*pt(t0, length(moviedata$TotalCosts)-2)
+#why not 2*(1-pt), as we did with b1? Because t0 is to the left of 0 (slightly negative, and r scans from left to right, we can skip the 1-pt step here.)
+``` 
+Go back up to the model we ran and look at the coefficients. You'll find that our estimates of b0, std.err.b0, t0 and p0 are all the same as that calculated in the model. I hope. 
+
+We've covered so much!
+- we estimated linear regression (or model) parameters
+- we created null and alternate hyps
+- we estimated sampling distributions for our model parameters
+- we conducted analytical tests based on these hypotheses and distributions
+
+What if we wanted to test different hypotheses though? For instance, what if I was interested in a deviation from a 1:1 relationship between total costs and revenue? Here, I would want a null hypothesis as follows:
+
+Null
+H(0) -> β1 = 1
+
+Alternate
+H(A) -> β1 =/= 1 
+
+```{r}
+summary(lm(moviedata$TotalRevenue-moviedata$TotalCosts ~ moviedata$TotalCosts))
+# testing against slope=1
+```
+
+**An important assumption:**
+
+Our sampling distributions for b0 and b1 take the form of t distributions, but only if σ^2 of residual variance is normally distributed (or approximately normal). This is an assumption that we make when running these tests. If this assumption is false, our sampling distribution is not going to be well estimated - making our hypothesis test erroneous.
+
+How can we test if this is true of our data? We could plot our residuals as a histogram and see if it looks kind of normal to the naked eye. However, if our sample isn't really large, this might be tricky to do. 
+
+A second tactic we can use is plotting errors against X axis points - if the scatter is non-random, it could suggest non-normal distribution. This is simply an invitation to dig deeper - not proof that residues are non-normal (or deviating sufficiently from normality to break the test)
+
+Another tactic used for normality testing is the Q-Q plot. Even this is just a visual check, not an air-tight proof - but is easier to judge.
+
+A Q-Q plot is a scatterplot created by plotting two sets of 'quantiles' against one another. If both sets of quantiles came from the same distribution (normal and normal, or chi-sq and chi-sq etc), we should see the points forming a line that’s roughly straight. By comparing our data to a theoretical normal distribution of the same length as our dataset, we can see if our dist is normal!
+
+```{r}
+#tactic 1 - Residues hist
+hist(resid(model))
+
+#tactic 2 - Residues vs x
+plot(resid(model)~moviedata$TotalCosts)
+
+#tactic 3 - Quantile-Quantile plot test of normal residuals
+qqnorm(resid(model))
+
+#for comparison, take a look at what happens when we use a chi-sq or exp dist in the Y axis instead of a normal
+qqplot(qnorm(seq(0,1,length=300)), qchisq(seq(0,1,length=300),df=3))
+qqplot(qnorm(seq(0,1,length=300)), qexp(seq(0,1,length=300), rate=1))
+
+#QQ plots don't just check normality - they can also check for other distributions, as long as the reference dist is appropriate.
+qqplot(qchisq(seq(0,1,length=300),df=3), qchisq(seq(0,1,length=300),df=3))
+```
+While our model looks ok, what could we have done if the residuals were not normally distributed? Data transformations are possible in these situations. For example, we could try transforming data using functions like log(), asin(), sqrt() etc - in the hope that one of those datasets better fit our testing assumptions.
+
+**A second important housekeeping test**
+Extremely high correlation (+ve or -ve) means low independence in estimates of slope and intercept. While it might not be fatal to the model, it is generally useful to test the robustness of these results by correcting this issue.
+
+*Variance-Covariance matrix* of the estimates in an lm - how do estimated parameters (b0 and b1) covary with one another? 
+
+vcov(summary(lm(y ~ x))) can be used to compute this - diagonal give us variances of b0 and b1, and in the off-diag positions are the covariance (same value repeated in both). Now these measures are arbitrary, but we can put them on a scale of -1 to 1 by calculating them as correlations.
+
+Turn this into a correlation matrix using cov2cor(vcov()). Diagonals are self correlation again, and off diags are the correlation. 
+
+Let's take a look at how our model did on parameter independence.
+
+```{r}
+vcov(model)
+cov2cor(vcov(model))
+```
+
+-0.83 is pretty close to -1 - not a good sign.
+
+What can we do when slope and intercept show low independence?
+
+It could be because the data is very far from zero and is being extrapolated too much. Simplest way to deal with this is to centre the predictor variable. This can be done by subtracting all the x values by mean(x). Now the intercept gives the value of y at mean(x). 
+
+We could go even further and standardize both variables - subtract the mean and divide by standard deviation.
+
+```{r}
+#Centred correction
+moviedata$tcdev <- moviedata$TotalCosts - mean(moviedata$TotalCosts)
+moviedata$trdev <- moviedata$TotalRevenue - mean(moviedata$TotalRevenue)
+
+model_centred_x <- lm(moviedata$TotalRevenue~moviedata$tcdev)
+summary(model_centred_x)
+
+cov2cor(vcov(model_centred_x))
+
+#Standardized correction
+moviedata$tcstd <- moviedata$tcdev/sd(moviedata$tcdev)
+moviedata$trstd <- moviedata$trdev/sd(moviedata$trdev)
+
+model_std <- lm(moviedata$trstd~moviedata$tcstd)
+summary(model_std)
+
+cov2cor(vcov(model_std))
+```
+Clearly, we've now fixed the independence issue. But visually, what was it that we actually did there?
+
+Let us look at the 3 different models we ran, and a plot of confidence intervals of the b0 and b1 estimates showing their correlation.
+```{r}
+plot(moviedata$TotalRevenue~moviedata$TotalCosts)
+
+#package time - grab yourself a car
+#install.packages("car")
+#library(car)
+confidenceEllipse(model)
+```
+
+```{r}
+plot(moviedata$TotalRevenue~moviedata$tcdev)
+confidenceEllipse(model_centred_x)
+```
+
+```{r}
+plot(moviedata$trstd~moviedata$tcstd)
+confidenceEllipse(model_std)
+```
+More theoretical ideas on housekeeping tests - https://www.stat.purdue.edu/~boli/stat512/lectures/topic2.pdf
+
+When we started working on linear regressions, I made the bold promise that it is distinct from correlations in one key goal - that it is used for predictions. So far, our entire analysis has provided very similar results to that of the correlation analysis. What are the predictions we can make? 
+
+More on this in the next episode.
+#############################################################################
+**Extra housekeeping**
+```{r}
+plot(model) 
+#gives us 4 plots to diagnose the fit
+#plot 1 plots residuals vs fitted values for each predicted Y (plotted on the X here lol)
+#plot 2 is the QQ plot
+```
+Points 150, 148 and 2 are detected as outliers, which can severely affect normality and homogeneity of variance. It can be useful to remove outliers to meet the test assumptions.
+
+Shapiro's test can check residual normality.
+
+```{r}
+shapiro.test(residuals(model))
+```
+
+**Some additional notes**:
+All of the math we did in this script can also be done using matrices instead of linear equations - and this helps understand better what R's engines actually does - if you are so inclined, read about that here: https://www.stat.purdue.edu/~boli/stat512/lectures/topic3.pdf
+
+**Some important notes on what linear models are:** 
+Unlike linear regressions, the linear in linear models does not describe the equation used in the model.
+
+Linear models are just any situation where the parameters are a "scalar coefficient" of the variable.
+
+So for ex. y = a + bx is a linear model (and also a linear equation)
+
+y = a + bx^2 is also a linear model! 
+This is because it takes the form y=a+bz where z=x^2. 
+
+However y = ax^b is not a linear model. 'b' here is not a scalar coefficient.
+
+A model like this can be made linear by taking the log of both sides - log(y) = log (a) + b*log(x), of the form Y = a+bX, where Y = log(y); X = log(x)
+
+You can even have y = a + bx + cw - where x and w are covariates. This is still linear. It is even linear if we deal with y = a + bx + cw + dxw
+
+However, y = a + b^x is not a linear model. These types of models do not have analytical solutions - and therefore need to be solved differently, perhaps using some kind of numeric optimization instead of analytical solutions. 
+
+You will not run into anything like this unless you decide to do a deep dive into stats, of course - but hopefully it helps define what a linear model is.
+
+#############################################################################
+```{r}
+summary(model)
+```
+
+The explanations of the parts of this output are as follows:
+
+Call - simply reminds you of the call that generated the object being summarized.
+
+Residuals - gives a five figure summary of the residuals: this should indicate any gross departure from normality. For example, very skewed residuals might lead to very different magnitudes for Q1 and Q2, or to the median residual being far from 0 (the mean residual is always zero if the model includes an intercept).
+
+Coefficients - gives a table relating to the estimated parameters of the model. 
+
+The first two columns are the least squares estimates (β) and the estimated standard errors associated with those estimates (σ(β)).
+
+The third column gives the parameter estimates divided by their estimated standard errors
+), respectively, which is a standardized measure of how far each parameter estimate is from zero.
+
+T = (β)/(σ(β))

@@ -1,0 +1,150 @@
+---
+title: "Categorical data"
+author: "HT"
+date: "03/11/2022"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+The hypothesis tests for categorical data are all based on comparing the observed contingency table to an expected contingency table. The expected contingency table is the imaginary contingency table you expect under the null hypothesis. As such, it actually embodies the null side of your research question.
+
+In order to explore observed and expected contingency tables, we're going to work with a data set (*Arrests*) built in to R, under the library carData.
+```{r}
+install.packages(carData)
+library(carData)
+
+#take a look at the dataset of interest, and the str (structure) of this dataset
+str(Arrests)
+
+#convert year into a factor (currently read by R as an integer) 
+Arrests$year <- as.factor(Arrests$year)
+```
+A contingency table shows the frequency (or proportion) of sampling units in each level of a categorical variable. The frequency is simply the number of sampling units that falls in each level.
+
+When there are two (or more) categorical variables, it is common to present the total frequencies for each row and column. These are the simple sums across each row and column, and are called marginal distributions. 
+
+By default, marginal distributions calculated from the data also represent the observed frequencies, as it comes from the data. This language of observed vs expected frequencies is used because we contrast the observed frequencies with the expected frequencies as calculated from the null hypothesis to conduct a chi-sq (χ2) test.
+```{r}
+#Build data table recording frequencies
+contingency.tbl <- table(Arrests$year, Arrests$colour)
+
+#simple data visualization
+mosaicplot(contingency.tbl, color = c("red", "blue"), xlab ="Year", ylab = "Race")
+
+#add margins that provide sums of all rows and columns
+marginal.dist <- addmargins(contingency.tbl)
+```
+A **χ2 contingency analysis** allows us to test the null hypothesis that two categorical variables are independent of each other. 
+
+For example, if a classroom of 30 students has 50% men and 50% women; and 20% of the class is taller than 6ft - we can make an estimation of the number of men and women with height above 6ft, if the variables (gender and height) are independent. To be precise, if the variables were independent, 20% of men would have height over 6ft, and 20% of women would, as well - suggesting that 3 men and 3 women respectively were above 6ft in height. 
+
+However, these overall frequencies could also be arrived at in non-independent ways! For instance, all 6 individuals over 6ft could be women - this would still make 20% of the class taller than 6ft, while not changing the 50% sex ratio. Height and gender are clearly co-varying here, rather than being independent. By calculating the 'distance' between null expectations (independent variables) and the observed frequencies, the χ2 test is able to figure out an area under the χ2 distribution relative to this distance - allowing us to calculate the probability that this distance is from the null distribution.
+
+Important caveats - The χ2 test is an approximation, and requires that all of the expected values are greater than 1 and that at least 80% are greater than 5. [check to see if this is true once we calculate the expected frequencies]
+
+**calculating null expectations**
+```{r}
+#in order to create the expected frequency table, for every cell of the marginal distribution we multiply row and column sums corresponding to that cell, and divide by table total.
+
+expected.dist <- marginal.dist #assigning for row and column labelling convenience, calculation done in next step
+
+for (i in 1:nrow(marginal.dist)-1){
+  for (j in 1:ncol(marginal.dist)-1){
+  expected.dist[i,j] = 
+    (marginal.dist[i,ncol(marginal.dist)]*
+    marginal.dist[nrow(marginal.dist), j])/
+    (marginal.dist[nrow(marginal.dist), ncol(marginal.dist)])
+  }
+}
+
+expected.dist
+```
+
+So now we have an expected distribution, and data from our observations. How do we find the distance between them? 
+
+Distance needs to have 2 properties:
+
+1. It should be relative to the expectation. If the difference between expectation and observation is 500, that doesn't mean anything without having the expectation for scale. However, if the difference is 500, but the expectation was only 100 - this is a huge difference! We can calculate differences relative to expectation by dividing by expectation.
+
+2. It should only be a measure of magnitude, not direction. In order to calculate cumulative difference of all cells between expected and observed, we have to add them up. If we took the differences as they were, then we would have some positive and some negative and they would all add up to zero - which is not helpful. One way to overcome this is to square the differences, so then we have only positive values.
+
+Using this, we calculate distance as:
+
+χ2 = Σ[{(exp(i)-obs(i))^2}/exp(i)]
+
+```{r}
+#Using the magic of matrix math that R allows, we can calculate this directly as follows:
+χ2 <- sum((expected.dist-marginal.dist)^2/expected.dist); χ2
+```
+
+So we have χ2 now, how do we get a probability from this? The χ2 distribution has just 1 parameter that we need to provide - the degrees of freedom. For a 2 variable contingency table, we calculate dof as follows:
+
+d.o.f = (# of rows - 1)(# of columns - 1)
+```{r}
+d.o.f <- (nrow(contingency.tbl)-1)*(ncol(contingency.tbl)-1)
+
+#visualizing a χ2 distribution
+xx <- seq(0,25, length(1000))
+χ2_yy <- dchisq(xx,d.o.f)
+plot(xx, χ2_yy, type="l");abline(v=χ2)
+
+#p-value calculation (use 1-pchisq because we are interested in right tail, but pchisq scans from left.)
+p <- 1-pchisq(χ2, d.o.f)
+```
+The χ2 contingency test can also be done with the function chisq.test(). If we give a frequency table as input, this function will calculate the χ2 test for us.
+
+Additionally, this inbuilt function allows us to directly calculate the null expectations without all these steps of code. 
+
+```{r}
+chisq.test(contingency.tbl)$expected
+chisq.test(contingency.tbl)
+```
+
+A second test of such data is the Fisher's exact test. While this test can be applied computationally to data-sets with more than 2 factors with 2 levels, it was developed for a 2 factor, 2 level analysis. Why?
+
+RA Fisher of the Fisher's exact test did not believe his department's tea lady's claim that she could tell whether tea was prepared with milk poured first or tea.
+
+Here, the 2 factors are what the lady thought was added first, and what was actually added first - both with 2 levels - tea first and milk first.
+
+We can replicate this type of data set using Arrests again -
+```{r}
+#Build a new data table recording frequencies
+contingency.tbl2 <- table(Arrests$sex, Arrests$colour)
+
+#simple data visualization
+mosaicplot(contingency.tbl2, color = c("red", "blue"), xlab ="Gender", ylab = "Race")
+
+#add margins that provide sums of all rows and columns
+marginal.dist2 <- addmargins(contingency.tbl2)
+```
+Using an "odds ratio" of these 4 possible event combinations, it is possible to calculate the exact probability that the event of interest to us (aka, the event that the data shaped up in the form of the specific contingency table in the observed data), relative (or conditional upon) the null hypothesis.
+
+Here, the null hypothesis is that the 2 factors are independent of one another.
+
+Additionally, it is possible to compute the exact probability of every event more extreme than the event of our interest - and sum up the probabilities of our event and all events more extreme. 
+
+Since doing such a calculation by hand would involve calculating a large large number of probabilities and then summing them up - it is far too miserable to do by hand - we will instead simply put it through R.
+
+In R, the simplest way to estimate an odds ratio is to use the command fisher.test(). This function will also perform the Fisher’s exact test analysis. 
+
+The input to this function is a contingency table like the one we calculated above. 
+
+```{r}
+fisher.test(contingency.tbl2)
+```
+Our calculated odd's ratio is 0.5693..., and it is significantly different from the null distribution - suggesting non-independence of the 2 factors - gender and race.
+
+Now what happens if we run this same test on the data from contingency table 1?
+```{r}
+fisher.test(contingency.tbl)
+```
+
+Since the frequencies in our dataset are too small for this problem (given that there are 6 levels in year, we need more data to work out the probabilities) - R tries to fix this problem by predicting additional data in each category to do it's calculation. This is not ideal for an actual study, but for now it serves our purpose.
+
+```{r}
+fisher.test(contingency.tbl, simulate.p.value=TRUE)
+```
+Notice that the exact test alone is performed now, and the odd's ratio is no longer calculated. That is because we can only perform that exact calculation for a 2 factor 2 level dataset. However, the test still works, and provides us with the same information about the hypothesis testing coming out of it.
+
+More info on the exact test here: https://online.stat.psu.edu/onlinecourses/sites/stat504/files/lesson03/TeaLady.out

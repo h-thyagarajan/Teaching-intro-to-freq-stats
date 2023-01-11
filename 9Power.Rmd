@@ -1,0 +1,240 @@
+---
+title: "Power"
+author: "HT"
+date: "03/11/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Power is the probability of getting a result in the rejection region when the null hypothesis is, in fact, false.
+
+The null hypothesis can be wrong in infinitely many ways, and to different degrees - from barely false to overwhelmingly false.
+
+In general, all other things being equal, the more false the null hypothesis is, the larger the power is. Computing power requires you to specify a degree of falsity of the null hypothesis.
+
+For example, consider a population with μ = 100
+Now members of the population are exposed to a treatment, and exposed members have a mean μ = 105
+
+In some measurements conducted, we land on an sd = 15 with n = 25.
+
+Our null dist now has a mean of 100, and sd = 15/sqrt(25) = 3
+
+What would the power be if the null hypothesis is false - aka the treatment exposed members are truly different?
+
+Let us set α at the conventional 0.05. First, let's look at the null distribution with zones of rejection.
+
+```{r}
+#rejection points
+lower_rp <- qnorm(0.025,100,3)
+higher_rp <- qnorm(0.975,100,3)
+
+x <-  seq(90,110,length=200)
+############Null dist plot############
+######################################
+curve(dnorm(x,100,3), xlim=c(90,110)) 
+x_ltail  <- c(90, seq(90, lower_rp, length = 300), lower_rp )
+y_ltail  <- c(0,dnorm(seq(90, lower_rp , length = 300), 100, 3),0)
+x_rtail  <- c(higher_rp, seq(higher_rp, 110, length = 300), 110)
+y_rtail  <- c(0,dnorm(seq(higher_rp, 110, length = 300), 100, 3),0)
+polygon(x_ltail,y_ltail, col=rgb(1,1,0,1))
+polygon(x_rtail,y_rtail, col=rgb(1,1,0,1))
+######################################
+```
+Alternatively, what is the probability of rejecting the null dist, given the 'true' distribution - μ = 105, sd/sqrt(n) = 3
+
+The question here can be rephrased as - what is the area under the curve of a normal distribution with μ = 105, sd/sqrt(n) = 3 covered using our identified zones of rejection.
+
+```{r}
+##########Alternate dist plot##########
+#######################################
+curve(dnorm(x,105,3), xlim=c(90,120)) 
+x_ltail  <- c(90, seq(90, lower_rp, length = 300), lower_rp )
+y_ltail  <- c(0,dnorm(seq(90, lower_rp , length = 300), 105, 3),0)
+x_rtail  <- c(higher_rp, seq(higher_rp, 120, length = 300), 120)
+y_rtail  <- c(0,dnorm(seq(higher_rp, 120, length = 300), 105, 3),0)
+polygon(x_ltail,y_ltail, col=rgb(1,1,0,1))
+polygon(x_rtail,y_rtail, col=rgb(1,1,0,1))
+#######################################
+```
+Ignoring the trivial area under the curve on the left hand tail, we can calculate this area. explicitly.
+```{r}
+1-pnorm(higher_rp, 105, 3)
+```
+
+What if the alternate μ was even higher? Say 107?
+
+```{r}
+##########Alternate dist plot##########
+#######################################
+curve(dnorm(x,107,3), xlim=c(93,120)) 
+x_ltail  <- c(93, seq(93, lower_rp, length = 300), lower_rp )
+y_ltail  <- c(0,dnorm(seq(93, lower_rp , length = 300), 107, 3),0)
+x_rtail  <- c(higher_rp, seq(higher_rp, 120, length = 300), 120)
+y_rtail  <- c(0,dnorm(seq(higher_rp, 120, length = 300), 107, 3),0)
+polygon(x_ltail,y_ltail, col=rgb(1,1,0,1))
+polygon(x_rtail,y_rtail, col=rgb(1,1,0,1))
+#######################################
+1-pnorm(higher_rp, 107, 3)
+```
+
+There is a simpler, more direct way to compute power for the 1-Sample Z test than this approach.
+
+We see in above calculations that an important factor influencing power is Effect Size, defined as the the amount by which the null hypothesis is wrong.
+
+E = μ - μ0
+
+Now to standardize this, we report in units of sd
+
+Es = (μ - μ0)/sd
+
+Es - standardized effect size, or Cohen's d (d for distance)
+
+Cohen proposed the following standards for standardized effect size:
+1 Small Effect — 0.20
+2 Medium Effect — 0.50
+3 Large Effect — 0.80
+
+Formally, for a test with T tails:
+
+power = pnorm(Es*sqrt(n) - Z_critical)
+Where Z_critical = qnorm(1-alpha/T) # for the right tail
+              or = qnorm(alpha/T)   # for the left tail
+
+For example, in our plot of a distribution with mean at 107:
+```{r}
+alpha <- 0.05
+Tails <- 2
+Z.crit <- qnorm(1 - alpha/Tails);Z.crit
+
+Es <- (107-100)/15
+power = pnorm(Es*sqrt(25) - Z.crit)
+```
+
+Do these numbers change with a change in distribution? Let's try the t
+
+```{r}
+alpha <- 0.05
+Tails <- 2
+t.crit <- qt(1 - alpha/Tails, df=24)
+
+Es <- (107-100)/15
+power = pt(Es*sqrt(25) - t.crit, df=24)
+```
+
+simple simulation based power analysis
+```{r}
+n <- 25; SD <- 15
+mean1 <- 107
+mean2 <- 100
+p <- NULL
+
+for (i in 1:10000){
+sample <- rnorm(n, mean1, SD)
+z <- (mean(sample) - mean2)/(SD/sqrt(n))
+p[i] <- 1-pnorm(z)
+}
+
+hist(p)
+power <- sum(p<0.05)/length(p)
+```
+
+Using lm on paired samples instead of single sample Z tests
+```{r}
+n <- 25; SD <- 15
+mean1 <- 100
+mean2 <- 107
+p <- NULL
+
+for (i in 1:10000){
+sample1 <- rnorm(n, mean1, SD)
+sample2 <- rnorm(n, mean2, SD)
+
+y <- c(sample1, sample2)
+x <- c(rep("t1", n), rep("t2", n))
+
+fit <- lm(y~x)
+p[i] <- summary(aov(fit))[[1]][[5]][1]
+}
+
+hist(p)
+power <- sum(p<0.05)/length(p)
+```
+
+pwr library provides you some simple tests for power analysis. 
+```{r}
+install.packages("pwr")
+library("pwr")
+pwr.t.test(n=25, d=((107-100)/15), sig.level=0.05, power=NULL, type= c("one.sample"), alternative = ("two.sided"))
+
+#d is the effect size, scale by standard deviation. 
+#Use power= NULL to determine the power.
+
+#sig level relates to type 1 error, and power is (1-type 2 error). So extremely high power will adjust alpha as well, or will need extremely high sample sizes.
+```
+Designing experiments with power in mind:
+
+Power of ~0.6 is generally not considered to be adequate. In most applications, power of 0.8 is considered minimal and 0.9 a reasonable target.
+
+From the calculations applied, it is clear that increases in sample size will increase power, since the square root of n is multiplied by Es in the formula.
+
+If we set a desired power and solved for the n, we could design studies with good power. Now this means knowing the amount of variance our samples will show, which is tricky, but we can make some approximate guesses if the area of study is well known.
+
+solving for n, we get
+
+n = ((Z.crit + Z.power) / Es)^2 
+
+Where Z.power is simply the qnorm of our desired power
+
+```{r}
+Es <- (107-100)/15
+alpha <- 0.05
+Tails <- 2
+Power <- 0.90
+Z.crit <- qnorm(1 - alpha/Tails)
+Z.power <- qnorm(Power)
+
+n <- ((Z.crit + Z.power) / Es)^2 
+n
+```
+
+Say we had no idea what to expect from sample variance. We could calculate a series of values of sd and look at the required sample sizes for all of them.
+
+```{r}
+sd <- seq(0,20, length=40)
+Es <- (110-100)/sd
+
+n <- ((Z.crit + Z.power) / Es)^2 
+plot(sd, n, type="l")
+```
+Factors affecting power:
+
+We know power is given by
+power = pnorm(Es*sqrt(n) - Z_critical)
+
+Let K = (Es*sqrt(n) - Z_critical), such that power = pnorm(K)
+
+How does power change with K?
+
+```{r}
+K <- seq(-4,4, length=100)
+power <- pnorm(K)
+
+plot(K, power, type="l")
+```
+
+The normal curve cumulative probability function Φ is a strictly increasing S-shaped function, as seen in the plot.
+
+So anything that increases K must also increase power, all other things being equal. Likewise, anything that decreases K must also decrease power.
+
+How does K (and therefore power) change with each of it's parameters?
+
+- K increases with n
+- K increases with Es
+- K increases with alpha (smaller alphas result in Z criticals further from 0)
+
+
+http://www.statpower.net/Content/2101/Lecture%20Notes/HypothesisTesting.pdf
+http://www.statpower.net/Content/2101/Lecture%20Notes/PowerFactors.pdf
