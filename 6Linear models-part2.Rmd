@@ -22,7 +22,7 @@ We checked our model to see
 Let's reload our data. This time, we're going to test if we can use the linear model to predict response variable values using our equation. To do this, we're going to subset our data and use a part of it to create the model. This model will then be used to predict the response variable values for the data that was not included, and the accuracy of these predictions can be tested.
 
 ```{r}
-moviedata <- read.csv(file="/Users/ht/Stats/practice_data/MovieData.csv")
+moviedata <- read.csv(file="/Users/ht/0/Stats/practice_data/MovieData.csv")
 
 #create new data columns that can be used to create centred models
 moviedata$tcdev <- moviedata$TotalCosts - mean(moviedata$TotalCosts)
@@ -93,7 +93,7 @@ Another really cool thing that we can get from the predict function, is confiden
 ```{r}
 conf_interval <- predict(lm(TotalRevenue~TotalCosts, data = moviedata), newdata = data.frame(TotalCosts = seq(0, 3500, by = 10)), interval = "confidence", level = 0.95)
 
-plot(TotalRevenue~TotalCosts, data = moviedata, xlab = "Cost", ylab = "Revenue"); abline(model)
+plot(TotalRevenue~TotalCosts, data = moviedata, xlab = "Cost", ylab = "Revenue"); abline(lm(TotalRevenue~TotalCosts, data = moviedata))
 lines(seq(0, 3500, by = 10), conf_interval[,2], col = "blue", lty = 2)
 lines(seq(0, 3500, by = 10), conf_interval[,3], col = "blue", lty = 2)
 ```
@@ -157,7 +157,7 @@ x1av_plot <- plot(resid(x2x3_model) ~ resid(x1resp_model)); abline(x1av_model)
 #library(car)
 avPlots(complete_model) #from the car package - plots all the added variable plots
 ```
-Amazing. We now know how to make regressions, how to make them
+
 
 ```{r}
 ```

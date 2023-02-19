@@ -79,7 +79,7 @@ This gives us a sampling 't' distribution with degrees of freedom (n-2)
 
 ```{r}
 #we already have our b1 estimate, so we just need std error now.
-std.err.b1 <-              RMSE/sqrt(sum((moviedata$TotalCosts-mean(moviedata$TotalCosts))^2))
+std.err.b1 <- RMSE/sqrt(sum((moviedata$TotalCosts-mean(moviedata$TotalCosts))^2))
 ```
 
 Unfortunately, because of how R sets up the t distribution functions to be standardized, we can't plot this sampling dist. However, we can calculate the t-statistic for our sample.
