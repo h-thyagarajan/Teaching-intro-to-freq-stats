@@ -24,13 +24,7 @@ plot(crabs$sp, crabs$BD)
 plot(crabs$sex, crabs$BD)
 ```
 
-Why did we pick just BD out of all possible response variables for analysis? Because they are all super correlated - don't really need to analyze all. See below:
-```{r}
-plot(data.frame(crabs$BD,crabs$CL,crabs$CW,crabs$FL,crabs$RW))
-cor(data.frame(crabs$BD,crabs$CL,crabs$CW,crabs$FL,crabs$RW))
-```
-
-The calculations work a little differently with 2 predictor variables. Sum of squares total 'SST' (which is our proxy measure of variance) is split as follows:
+The calculations work a little differently with 2 predictor variables. Sum of squares total 'SST' (which is our measure of variance) is split as follows:
 
 SST = SSR + SSC + SSI + SSE (Rows+Columns+Interaction+Error)
 (Remember previously it was simply SST = SSG + SSE)
@@ -160,8 +154,8 @@ Let's use anova() to see if the difference in error is significant between the t
 
 ```{r}
 anova(m2wi, m2ni) #with interaction is better!
-anova(m2ni, m1sp) #adding sex as an effect, without interaction is not better                   than just species as an effect
-anova(m2wi, m1sp) #however with interaction, the model is better than just                      species main effects
+anova(m2ni, m1sp) #adding sex as an effect, without interaction is not better than just species as an effect
+anova(m2wi, m1sp) #however with interaction, the model is better than just species main effects
 
 #Can we do the entire comparison at once?
 anova(m2wi, m2ni, m1sp, m1sx)
@@ -188,6 +182,11 @@ Additionally, it gives us an opportunity to report on significance levels captur
 ```{r}
 boxplot(BD ~ sex*sp, data = crabs) # basic boxplot for BD vs sex*sp
 
+#ggplotting
+ggplot(aes(x=sp, y=BD, fill=sex), data=crabs) +
+  geom_boxplot() + 
+  theme_classic() 
+  
 TukeyHSD(m2wi)
 
 #Uncomment this package to run the function below
@@ -204,9 +203,20 @@ generate_label <- function(TUKEY, variable){
 }
 
 hsd_labels <- generate_label(TukeyHSD(m2wi), "sex:sp")
+hsd_labels_reorg <- c("a","a","b","b")
 
 #boxplot + significance text
 a=boxplot(BD~sp*sex, data=crabs, ylim=c(5,25)); text(c(1:(nlevels(crabs$sex)+nlevels(crabs$sp))), a$stats[nrow(a$stats),]+1, hsd_labels[,1])
+
+#ggplotting
+ggplot(aes(x=sp, y=BD, fill=sex), data=crabs) +
+  geom_boxplot() + 
+  annotate(geom="text", 
+           x=(c(0.75,1.25,1.75,2.25)), 
+           y=(c(15,17,19.1,19)), 
+           label=hsd_labels_reorg) +
+  theme_classic() 
+  
 ```
 As cool as this is, it does not allow us to visualize the interaction effect that we discovered to be significant. This can be plotted using an 'interaction plot'.
 
@@ -222,6 +232,9 @@ text(c(1:nlevels(crabs$sp)), a$stats[3,]+1, hsd_labels[,1])
 ```
 original resource: https://vislab-ccom.unh.edu/~schwehr/Classes/2011/esci895-researchtools/25-R-lab3-ANOVA.pdf
 
-Interactions, but without main effects:
+
+Why did we pick just BD out of all possible response variables for analysis? Because they are all super correlated - don't really need to analyze all. See below:
 ```{r}
+plot(data.frame(crabs$BD,crabs$CL,crabs$CW,crabs$FL,crabs$RW))
+cor(data.frame(crabs$BD,crabs$CL,crabs$CW,crabs$FL,crabs$RW))
 ```
